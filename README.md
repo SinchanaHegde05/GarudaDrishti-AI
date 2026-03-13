@@ -1,4 +1,4 @@
-# ORION — Autonomous Satellite Fault Detection System
+# GARUDA DRISHTI— Autonomous Satellite Fault Detection System
 
 ## Architecture Overview
 
