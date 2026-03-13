@@ -11,7 +11,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import threading
 
-app = Flask(__name__, static_folder='static')
+app = Flask(__name__, static_folder='static', static_url_path='')
 
 model       = None
 scaler_min  = None
