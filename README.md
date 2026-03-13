@@ -1,78 +1,122 @@
-# 🛰️ Garuda Drishti — Autonomous Satellite Fault Detection System
-Garuda Drishti (meaning Eagle's Eye in Sanskrit) is an AI-powered satellite health monitoring system that automatically detects anomalies in satellite telemetry data using deep learning.
+# ORION — Autonomous Satellite Fault Detection System
 
-The system mimics how real space agencies monitor satellites in orbit, where manual intervention is impossible and faults must be detected autonomously before they lead to mission failure.
+## Architecture Overview
 
-🚀 Project Overview
+```
+User Browser  ←→  Flask API (app.py)  ←→  TensorFlow LSTM Autoencoder
+                         ↕
+              NASA SMAP Dataset (fetched online)
+```
 
-Satellites operate in extremely harsh environments in space. When a sensor fails or behaves abnormally, it can lead to severe system malfunctions.
+---
 
-Traditional rule-based monitoring systems struggle to detect complex patterns across multiple sensor channels.
+## Step-by-Step Implementation
 
-Garuda Drishti solves this problem using an LSTM Autoencoder model that learns normal satellite behavior and identifies abnormal patterns automatically.
+### Step 1 — Dataset (Online, No Local Download)
+- **Source**: NASA SMAP (Soil Moisture Active Passive) P-1 channel
+- **URL**: `github.com/khundman/telemanom` (NASA's official anomaly benchmark)
+- **Method**: `fetch_npy_online()` — downloads `.npy` into memory using `io.BytesIO`, never touches disk
+- **Shape**: ~8000 timesteps × 25 sensor channels
 
-⚠️ Problem Statement
+### Step 2 — Preprocessing
+- **MinMax Scaling**: Each of 25 channels scaled to [0,1] range
+- **Sequence Creation**: Rolling windows of length 30 → shape (N, 30, 25)
+- **Train/Test Split**: Uses NASA's pre-split train/test files
 
-In space missions:
+### Step 3 — LSTM Autoencoder Model
+```
+Input (30, 25)
+  → LSTM(64, return_sequences=True)
+  → LSTM(32, return_sequences=False)        ← Encoder
+  → Dense(16, relu)                         ← Bottleneck
+  → RepeatVector(30)
+  → LSTM(32, return_sequences=True)
+  → LSTM(64, return_sequences=True)         ← Decoder
+  → TimeDistributed(Dense(25))              ← Reconstruction
+Output (30, 25)
+```
+- **Loss**: MSE (Mean Squared Error)
+- **Optimizer**: Adam
+- **Epochs**: 15, Batch size: 64
 
-Manual repair is impossible
+### Step 4 — Anomaly Detection Logic
+- After training, compute reconstruction error on ALL training sequences
+- **Threshold** = mean(train_errors) + 2 × std(train_errors)
+- At inference: error > threshold → ANOMALY
+- **Severity**:
+  - error < threshold → NOMINAL ✓
+  - threshold < error ≤ 2×threshold → WARNING ⚠
+  - error > 2×threshold → CRITICAL ✕
 
-Sensor failures can cause mission loss
+### Step 5 — Flask API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Serve the frontend |
+| `/api/train` | POST | Start background training thread |
+| `/api/status` | GET | Poll training progress |
+| `/api/predict` | POST | Analyze sensor readings |
+| `/api/demo` | GET | Get sample normal/anomalous data |
 
-Telemetry data is complex and multi-dimensional
+### Step 6 — Interactive Frontend
+- **Space-themed dark UI** with real-time animations
+- 25 editable sensor input channels
+- Timestep slider for multi-frame telemetry
+- Load normal/anomalous demo samples
+- Real-time scan history chart (canvas)
+- System log with timestamps
+- Result: verdict + reconstruction error bar + metrics
 
-Therefore, an intelligent autonomous fault detection system is required to monitor satellite health in real time.
+---
 
-⚙️ How the System Works
-1️⃣ Telemetry Data Simulation
+## How to Run
 
-The system generates realistic satellite telemetry data:
+### Prerequisites
+```bash
+pip install flask tensorflow numpy requests
+```
 
-7000 timesteps
+### Start Server
+```bash
+python app.py
+```
 
-25 sensor channels
+### Open Browser
+```
+http://localhost:5000
+```
 
-These simulate parameters such as:
+### Usage Flow
+1. Click **"Initialize & Train Neural Network"**
+2. Wait ~2-3 minutes for training (progress shown live)
+3. Click **"Load Normal Sample"** or **"Load Anomaly Sample"** (or enter custom values)
+4. Click **"Analyze Telemetry"**
+5. View result: NOMINAL / WARNING / CRITICAL
 
-Thermal variations
+---
 
-Power system fluctuations
+## Project Structure
+```
+orion/
+├── app.py              # Flask backend + ML model
+├── requirements.txt    # Python dependencies
+├── README.md           # This file
+└── static/
+    └── index.html      # Frontend (single-file, no build step)
+```
 
-Attitude control signals
+---
 
-Fuel levels
+## Key Design Decisions
 
-Environmental variations
+**Why LSTM Autoencoder?**
+- Satellites produce time-series data — LSTM captures temporal dependencies
+- Autoencoders learn "normal" patterns unsupervised
+- High reconstruction error = anomalous behavior
 
-The dataset mimics patterns similar to telemetry from NASA SMAP and ISRO satellite missions.
+**Why no dataset download?**
+- Uses `io.BytesIO` to stream `.npy` files directly into NumPy arrays
+- Zero disk writes, works in any environment
 
-2️⃣ LSTM Autoencoder Model
-
-The AI model is trained only on normal satellite behavior.
-
-Architecture:
-
-Encoder → compresses sensor data
-Decoder → reconstructs the original data
-
-Key idea:
-
-Normal data → reconstructed accurately
-
-Faulty data → reconstructed poorly
-
-This difference allows the model to detect anomalies.
-
-3️⃣ Anomaly Detection
-
-The system calculates reconstruction error between:
-
-Original data vs Reconstructed data
-
-Threshold formula:
-
-Threshold = Mean Error + 2 × Standard Deviation
-
-If the error exceeds the threshold:
-
-🚨 Fault Detected
+**Why threshold = mean + 2σ?**
+- Statistically, ~95% of normal data falls within 2 standard deviations
+- Robust to noise while sensitive to true anomalies
