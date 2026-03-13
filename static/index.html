@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORION — Satellite Fault Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #020408;
+  --bg2:       #050c14;
+  --panel:     #080f1a;
+  --border:    #0d2035;
+  --border2:   #0a3060;
+  --accent:    #00d4ff;
+  --accent2:   #0066ff;
+  --warn:      #ff9500;
+  --danger:    #ff2d55;
+  --ok:        #00ff88;
+  --text:      #c8daf0;
+  --text-dim:  #4a6a8a;
+  --mono:      'Share Tech Mono', monospace;
+  --sans:      'Barlow Condensed', sans-serif;
+  --body:      'Barlow', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Stars bg ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 10% 15%, #fff5 0%, transparent 100%),
+    radial-gradient(1px 1px at 30% 60%, #fff3 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 25%, #fff4 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 80%, #fff2 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 40%, #fff3 0%, transparent 100%),
+    radial-gradient(1px 1px at 20% 90%, #fff2 0%, transparent 100%),
+    radial-gradient(1px 1px at 65% 55%, #fff3 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 10%, #fff4 0%, transparent 100%),
+    radial-gradient(2px 2px at 85% 20%, #00d4ff22 0%, transparent 100%),
+    radial-gradient(2px 2px at 5%  70%, #0066ff22 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ── Layout ── */
+.container { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+
+/* ── Header ── */
+header {
+  border-bottom: 1px solid var(--border);
+  padding: 20px 0;
+  background: linear-gradient(180deg, #020c1880 0%, transparent 100%);
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.header-inner {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.logo {
+  display: flex; align-items: center; gap: 12px;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.logo-icon::before {
+  content: '';
+  width: 16px; height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--accent);
+}
+.logo-icon::after {
+  content: '';
+  position: absolute;
+  width: 50px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  transform: rotate(-45deg);
+}
+.logo h1 {
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 8px;
+  color: #fff;
+  text-transform: uppercase;
+}
+.logo span {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  display: block;
+  margin-top: -2px;
+}
+.status-bar {
+  display: flex; gap: 20px; align-items: center;
+}
+.stat-pill {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  display: flex; align-items: center; gap: 6px;
+}
+.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--text-dim);
+}
+.dot.ok  { background: var(--ok);     box-shadow: 0 0 6px var(--ok); }
+.dot.warn { background: var(--warn);   box-shadow: 0 0 6px var(--warn); }
+.dot.err { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+.dot.active { animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%     { opacity:0.4; transform:scale(0.8); }
+}
+
+/* ── Main grid ── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 24px;
+  padding: 32px 0;
+}
+@media(max-width:900px) {
+  .main-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Section labels ── */
+.section-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Panel ── */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.panel::before {
+  content: '';
+  position: absolute; top:0; left:0; right:0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent2), transparent);
+  opacity: 0.5;
+}
+
+/* ── Train button ── */
+.btn-train {
+  width: 100%;
+  padding: 14px 24px;
+  background: transparent;
+  border: 1px solid var(--accent2);
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.btn-train::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--accent2)20, transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.btn-train:hover::before { opacity: 1; }
+.btn-train:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent2)40;
+}
+.btn-train:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Progress bar ── */
+.progress-wrap {
+  margin-top: 16px;
+  display: none;
+}
+.progress-wrap.visible { display: block; }
+.progress-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+  min-height: 16px;
+}
+.progress-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  border-radius: 1px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 8px var(--accent);
+  width: 0%;
+}
+
+/* ── Sensor input grid ── */
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.sensor-cell {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sensor-cell label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.sensor-cell input {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 8px;
+  width: 100%;
+  transition: border-color 0.2s;
+  border-radius: 1px;
+  text-align: center;
+}
+.sensor-cell input:focus {
+  outline: none;
+  border-color: var(--accent2);
+  box-shadow: 0 0 8px var(--accent2)30;
+}
+.sensor-cell input.anomalous-val {
+  border-color: var(--danger)80;
+  color: var(--warn);
+}
+
+/* ── Analyze button ── */
+.btn-analyze {
+  width: 100%;
+  padding: 16px;
+  background: linear-gradient(135deg, var(--accent2)80, var(--accent)20);
+  border: 1px solid var(--accent);
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 0 30px var(--accent2)30;
+}
+.btn-analyze:hover {
+  background: linear-gradient(135deg, var(--accent2), var(--accent)40);
+  box-shadow: 0 0 40px var(--accent2)60;
+  transform: translateY(-1px);
+}
+.btn-analyze:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+
+.btn-row { display:flex; gap:10px; margin-bottom:20px; }
+.btn-sm {
+  flex:1;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-sm:hover { border-color: var(--accent2); color: var(--accent); }
+
+/* ── Result panel ── */
+.result-panel {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  display: none;
+  animation: fadeSlide 0.4s ease;
+}
+.result-panel.visible { display: block; }
+@keyframes fadeSlide {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.result-verdict {
+  font-family: var(--sans);
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 16px;
+}
+.result-verdict.ok      { color: var(--ok);     text-shadow: 0 0 30px var(--ok); }
+.result-verdict.warn    { color: var(--warn);   text-shadow: 0 0 30px var(--warn); }
+.result-verdict.danger  { color: var(--danger); text-shadow: 0 0 30px var(--danger); }
+
+.result-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+.metric-card {
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.metric-card .m-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.metric-card .m-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: #fff;
+  font-weight: bold;
+}
+.metric-card .m-val.ok     { color: var(--ok); }
+.metric-card .m-val.warn   { color: var(--warn); }
+.metric-card .m-val.danger { color: var(--danger); }
+
+/* ── Error bar viz ── */
+.error-viz {
+  margin-top: 16px;
+}
+.error-label-row {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.error-track {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: visible;
+  position: relative;
+}
+.error-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s cubic-bezier(.22,.68,0,1.2);
+  position: relative;
+}
+.error-fill::after {
+  content: '';
+  position: absolute; right:-1px; top:-3px;
+  width: 2px; height: 12px;
+  background: inherit;
+  border-radius: 1px;
+}
+.threshold-line {
+  position: absolute;
+  top: -8px; bottom: -8px;
+  width: 2px;
+  background: var(--warn);
+  box-shadow: 0 0 6px var(--warn);
+}
+.threshold-tip {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+/* ── Sidebar ── */
+.sidebar { display: flex; flex-direction: column; gap: 24px; }
+
+/* ── Log ── */
+.log-body {
+  height: 200px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+.log-body::-webkit-scrollbar { width: 3px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border2); }
+.log-entry { display: flex; gap: 10px; }
+.log-time  { color: var(--accent2); flex-shrink: 0; }
+.log-ok    { color: var(--ok); }
+.log-warn  { color: var(--warn); }
+.log-err   { color: var(--danger); }
+
+/* ── Readings history mini-chart ── */
+canvas#historyChart {
+  width: 100%;
+  height: 120px;
+}
+
+/* ── Model info ── */
+.info-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.info-row:last-child { border-bottom: none; }
+.info-row .k { color: var(--text-dim); font-family: var(--mono); font-size: 11px; letter-spacing: 1px; }
+.info-row .v { color: #fff; font-family: var(--mono); font-size: 12px; }
+
+/* ── Scan animation ── */
+.scan-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 20px;
+  transition: opacity 0.5s;
+}
+.scan-overlay.hidden { opacity: 0; pointer-events: none; }
+.scan-ring {
+  width: 100px; height: 100px;
+  border: 2px solid var(--accent2);
+  border-radius: 50%;
+  position: relative;
+  animation: spin 2s linear infinite;
+}
+.scan-ring::before {
+  content: '';
+  position: absolute; top:10px; left:10px; right:10px; bottom:10px;
+  border: 1px solid var(--accent)40;
+  border-radius: 50%;
+}
+.scan-ring::after {
+  content: '';
+  position: absolute; inset: -4px;
+  border: 1px solid var(--accent)20;
+  border-radius: 50%;
+  animation: spin 3s linear infinite reverse;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.scan-text {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 4px;
+  color: var(--text-dim); text-transform: uppercase;
+  animation: blink 1.5s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 30px; right: 30px;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 12px 20px;
+  z-index: 200;
+  transform: translateX(200%);
+  transition: transform 0.3s ease;
+  max-width: 320px;
+}
+.toast.show { transform: translateX(0); }
+</style>
+</head>
+<body>
+
+<!-- Boot screen -->
+<div class="scan-overlay" id="bootOverlay">
+  <div class="scan-ring"></div>
+  <div class="scan-text">Initializing ORION Systems</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<header>
+  <div class="container header-inner">
+    <div class="logo">
+      <div class="logo-icon"></div>
+      <div>
+        <h1>GARUDA DRISHTI</h1>
+        <span>Autonomous Satellite Fault Detection</span>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="stat-pill"><span class="dot" id="modelDot"></span><span id="modelStatusText">MODEL OFFLINE</span></div>
+      <div class="stat-pill" id="sessionCounter">SESSION — 0 SCANS</div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+<div class="main-grid">
+
+  <!-- LEFT: Main panel -->
+  <div class="left-col">
+
+    <!-- Train Model -->
+    <div class="panel" style="margin-bottom:24px">
+      <div class="section-label">01 — System Initialization</div>
+      <p style="font-size:13px; color:var(--text-dim); margin-bottom:16px; line-height:1.7;">
+        Fetch NASA SMAP telemetry dataset online and train an LSTM Autoencoder
+        to learn normal satellite sensor behavior patterns.
+      </p>
+      <button class="btn-train" id="trainBtn" onclick="trainModel()">
+        ⚡ Initialize &amp; Train Neural Network
+      </button>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-label" id="progressLabel">—</div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      </div>
+    </div>
+
+    <!-- Sensor Input -->
+    <div class="panel">
+      <div class="section-label">02 — Sensor Telemetry Input</div>
+
+      <div class="btn-row">
+        <button class="btn-sm" onclick="loadDemo('normal')">↓ Load Normal Sample</button>
+        <button class="btn-sm" onclick="loadDemo('anomalous')">⚠ Load Anomaly Sample</button>
+        <button class="btn-sm" onclick="clearInputs()">✕ Clear All</button>
+        <button class="btn-sm" onclick="randomize()">⟳ Randomize</button>
+      </div>
+
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:12px;letter-spacing:1px;">
+        ENTER SENSOR CHANNEL VALUES (0.0 — 1.0 normalized)
+      </div>
+
+      <div class="sensor-grid" id="sensorGrid">
+        <!-- Generated by JS -->
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);margin-bottom:6px;letter-spacing:1px;">TIMESTEP INDEX — <span id="tsLabel">1 of 1</span></div>
+        <input type="range" id="tsSlider" min="0" max="0" value="0"
+          style="width:100%;accent-color:var(--accent2)"
+          oninput="updateTimestepLabel()">
+      </div>
+
+      <button class="btn-analyze" id="analyzeBtn" onclick="analyze()" disabled>
+        ▶ Analyze Telemetry
+      </button>
+
+      <!-- Result -->
+      <div class="result-panel" id="resultPanel">
+        <div class="section-label">03 — Fault Analysis Result</div>
+        <div class="result-verdict" id="resultVerdict"></div>
+
+        <div class="result-metrics" id="resultMetrics"></div>
+
+        <div class="error-viz" id="errorViz"></div>
+
+        <div style="margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.8;" id="resultDesc"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Sidebar -->
+  <div class="sidebar">
+
+    <!-- Model Info -->
+    <div class="panel">
+      <div class="section-label">Model Specs</div>
+      <div class="info-row"><span class="k">Architecture</span><span class="v">LSTM Autoencoder</span></div>
+      <div class="info-row"><span class="k">Dataset</span><span class="v">NASA SMAP P-1</span></div>
+      <div class="info-row"><span class="k">Sequence Len</span><span class="v">30 timesteps</span></div>
+      <div class="info-row"><span class="k">Channels</span><span class="v">25 sensors</span></div>
+      <div class="info-row"><span class="k">Epochs</span><span class="v">15</span></div>
+      <div class="info-row"><span class="k">Threshold</span><span class="v" id="thresholdDisplay">—</span></div>
+      <div class="info-row"><span class="k">Last Score</span><span class="v" id="lastScoreDisplay">—</span></div>
+    </div>
+
+    <!-- Scan History -->
+    <div class="panel">
+      <div class="section-label">Scan History</div>
+      <canvas id="historyChart"></canvas>
+    </div>
+
+    <!-- System Log -->
+    <div class="panel">
+      <div class="section-label">System Log</div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────────────────────────
+let modelReady = false;
+let scanCount = 0;
+let statusPoller = null;
+let demoData = null;
+let scanHistory = [];
+let currentReadings = null; // shape: [timesteps][25]
+const N_FEATURES = 25;
+const SEQ_LEN = 30;
+
+// ─── Boot ────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  buildSensorGrid();
+  setTimeout(() => {
+    document.getElementById('bootOverlay').classList.add('hidden');
+    log('System initialized — ORION v2.4.1', 'ok');
+    log('Awaiting model initialization...', '');
+    drawHistoryChart();
+    checkExistingModel();
+  }, 1800);
+};
+
+async function checkExistingModel() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    if (s.status === 'ready') {
+      setModelReady();
+      log('Model loaded from session', 'ok');
+    }
+  } catch(e) {}
+}
+
+// ─── Sensor Grid ─────────────────────────────────────────────────────────────
+function buildSensorGrid() {
+  const grid = document.getElementById('sensorGrid');
+  const names = ['TEMP','VOLT','CURR','PRESS','HUMID','FLUX','RAD','MAG','ACC','GYR',
+                 'BATT','THERM','SOLAR','RX_SIG','TX_POW','CLK','MEM','CPU','BUS','PWR',
+                 'ATT_X','ATT_Y','ATT_Z','VEL','FUEL'];
+  grid.innerHTML = '';
+  for (let i = 0; i < N_FEATURES; i++) {
+    grid.innerHTML += `
+      <div class="sensor-cell">
+        <label>${names[i] || 'CH'+String(i+1).padStart(2,'0')}</label>
+        <input type="number" id="s${i}" step="0.01" min="-2" max="3"
+               value="${(0.45+Math.random()*0.1).toFixed(3)}"
+               placeholder="0.000"
+               oninput="markInput(this)">
+      </div>`;
+  }
+}
+
+function markInput(el) {
+  const v = parseFloat(el.value);
+  el.classList.toggle('anomalous-val', !isNaN(v) && (v > 1.2 || v < -0.2));
+}
+
+// ─── Training ─────────────────────────────────────────────────────────────────
+async function trainModel() {
+  const btn = document.getElementById('trainBtn');
+  btn.disabled = true;
+  const wrap = document.getElementById('progressWrap');
+  wrap.classList.add('visible');
+  log('Initiating model training pipeline...', '');
+  setDot('warn');
+
+  try {
+    await fetch('/api/demo'); // prime the demo cache
+    const r = await fetch('/api/train', { method:'POST' });
+    if (!r.ok) {
+      const e = await r.json();
+      log(e.message || 'Train request failed', 'err');
+      btn.disabled = false;
+      return;
+    }
+    statusPoller = setInterval(pollStatus, 1200);
+  } catch(e) {
+    log('Server connection failed: ' + e.message, 'err');
+    btn.disabled = false;
+  }
+}
+
+async function pollStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    document.getElementById('progressLabel').textContent = s.message;
+    document.getElementById('progressFill').style.width = s.progress + '%';
+
+    if (s.status === 'ready') {
+      clearInterval(statusPoller);
+      setModelReady();
+      // Fetch threshold
+      const demo = await (await fetch('/api/demo')).json();
+      demoData = demo;
+      log('Training complete — model ready', 'ok');
+      // get threshold from a quick predict
+      try {
+        const pr = await fetch('/api/predict', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ readings: demo.normal })
+        });
+        const pd = await pr.json();
+        document.getElementById('thresholdDisplay').textContent = pd.threshold?.toFixed(5) || '—';
+      } catch(_){}
+
+    } else if (s.status === 'error') {
+      clearInterval(statusPoller);
+      log('Training error: ' + s.message, 'err');
+      document.getElementById('trainBtn').disabled = false;
+      setDot('err');
+    } else {
+      log(s.message, '');
+    }
+  } catch(e) {
+    log('Polling error', 'err');
+  }
+}
+
+function setModelReady() {
+  modelReady = true;
+  setDot('ok');
+  document.getElementById('modelStatusText').textContent = 'MODEL ONLINE';
+  document.getElementById('analyzeBtn').disabled = false;
+  document.getElementById('progressLabel').textContent = 'Training complete';
+  document.getElementById('progressFill').style.width = '100%';
+  showToast('Neural network ready for telemetry analysis');
+}
+
+// ─── Demo data ───────────────────────────────────────────────────────────────
+async function loadDemo(type) {
+  if (!demoData) {
+    try {
+      const r = await fetch('/api/demo');
+      demoData = await r.json();
+    } catch(e) {
+      showToast('Could not load demo data');
+      return;
+    }
+  }
+  const data = type === 'normal' ? demoData.normal : demoData.anomalous;
+  currentReadings = data; // [30][25]
+  const slider = document.getElementById('tsSlider');
+  slider.max = data.length - 1;
+  slider.value = data.length - 1;
+  updateTimestepLabel();
+  fillInputsFromTimestep(data.length - 1);
+  log(`Loaded ${type} telemetry sample (${data.length} timesteps)`, type === 'anomalous' ? 'warn' : 'ok');
+}
+
+function fillInputsFromTimestep(ts) {
+  if (!currentReadings) return;
+  const row = currentReadings[ts];
+  for (let i = 0; i < N_FEATURES; i++) {
+    const inp = document.getElementById('s'+i);
+    if (inp && row[i] !== undefined) {
+      inp.value = parseFloat(row[i]).toFixed(4);
+      markInput(inp);
+    }
+  }
+}
+
+function updateTimestepLabel() {
+  const s = document.getElementById('tsSlider');
+  const ts = parseInt(s.value);
+  document.getElementById('tsLabel').textContent = `${ts+1} of ${parseInt(s.max)+1}`;
+  if (currentReadings) fillInputsFromTimestep(ts);
+}
+
+function clearInputs() {
+  currentReadings = null;
+  const slider = document.getElementById('tsSlider');
+  slider.max = 0; slider.value = 0;
+  document.getElementById('tsLabel').textContent = '1 of 1';
+  for (let i = 0; i < N_FEATURES; i++) {
+    const inp = document.getElementById('s'+i);
+    inp.value = '0.500';
+    inp.classList.remove('anomalous-val');
+  }
+  document.getElementById('resultPanel').classList.remove('visible');
+  log('Inputs cleared', '');
+}
+
+function randomize() {
+  const isAnomalous = Math.random() > 0.5;
+  for (let i = 0; i < N_FEATURES; i++) {
+    const inp = document.getElementById('s'+i);
+    let v = 0.3 + Math.random() * 0.4;
+    if (isAnomalous && Math.random() > 0.7) v = Math.random() > 0.5 ? 1.3 + Math.random()*0.7 : -0.3 - Math.random()*0.3;
+    inp.value = v.toFixed(4);
+    markInput(inp);
+  }
+  log('Random telemetry generated', '');
+}
+
+// ─── Analyze ─────────────────────────────────────────────────────────────────
+async function analyze() {
+  if (!modelReady) { showToast('Train model first'); return; }
+
+  // Collect readings — use full sequence if available, else repeat single row
+  let readings;
+  if (currentReadings && currentReadings.length >= SEQ_LEN) {
+    readings = currentReadings;
+  } else {
+    // Build from current inputs
+    const row = [];
+    for (let i = 0; i < N_FEATURES; i++) row.push(parseFloat(document.getElementById('s'+i).value) || 0);
+    readings = Array.from({length: SEQ_LEN}, () => [...row]);
+    // If we have partial sequence
+    if (currentReadings) {
+      const base = Array.from({length: SEQ_LEN - currentReadings.length}, () => [...row]);
+      readings = [...base, ...currentReadings];
+    }
+  }
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.textContent = '↻ Processing...';
+  log('Sending telemetry for anomaly analysis...', '');
+
+  try {
+    const r = await fetch('/api/predict', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ readings })
+    });
+    const data = await r.json();
+
+    if (data.error && !data.anomaly && data.anomaly !== false) {
+      throw new Error(data.error);
+    }
+
+    scanCount++;
+    document.getElementById('sessionCounter').textContent = `SESSION — ${scanCount} SCAN${scanCount!==1?'S':''}`;
+    scanHistory.push({ anomaly: data.anomaly, score: data.error_ratio, ts: new Date() });
+    drawHistoryChart();
+
+    showResult(data);
+    document.getElementById('lastScoreDisplay').textContent = data.error?.toFixed(6) || '—';
+    log(`Scan #${scanCount}: ${data.severity} (ratio=${data.error_ratio})`, data.anomaly ? (data.severity==='CRITICAL'?'err':'warn') : 'ok');
+
+  } catch(e) {
+    log('Analysis failed: ' + e.message, 'err');
+    showToast('Analysis failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Analyze Telemetry';
+  }
+}
+
+function showResult(d) {
+  const panel = document.getElementById('resultPanel');
+  panel.classList.add('visible');
+
+  const verdict = document.getElementById('resultVerdict');
+  verdict.textContent = d.severity;
+  verdict.className = 'result-verdict ' + (d.severity==='NOMINAL'?'ok': d.severity==='WARNING'?'warn':'danger');
+
+  // Metrics
+  const metricsEl = document.getElementById('resultMetrics');
+  const cls = d.severity==='NOMINAL'?'ok': d.severity==='WARNING'?'warn':'danger';
+  metricsEl.innerHTML = `
+    <div class="metric-card">
+      <div class="m-label">Recon. Error</div>
+      <div class="m-val ${cls}">${d.error?.toFixed(5)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Threshold</div>
+      <div class="m-val">${d.threshold?.toFixed(5)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="m-label">Error Ratio</div>
+      <div class="m-val ${cls}">${d.error_ratio}×</div>
+    </div>`;
+
+  // Error bar
+  const pct = Math.min(98, (d.error / (d.threshold * 2)) * 100);
+  const threshPct = Math.min(98, 50); // threshold is always at 50% of 2× range
+  const fillColor = d.severity==='NOMINAL'?'var(--ok)': d.severity==='WARNING'?'var(--warn)':'var(--danger)';
+  document.getElementById('errorViz').innerHTML = `
+    <div class="error-label-row">
+      <span>Reconstruction Error</span>
+      <span>${d.anomaly ? '⚠ ABOVE THRESHOLD' : '✓ WITHIN NORMAL'}</span>
+    </div>
+    <div class="error-track">
+      <div class="error-fill" style="width:${pct}%;background:${fillColor};box-shadow:0 0 8px ${fillColor}"></div>
+      <div class="threshold-line" style="left:${threshPct}%">
+        <div class="threshold-tip">THRESHOLD</div>
+      </div>
+    </div>`;
+
+  const desc = document.getElementById('resultDesc');
+  if (!d.anomaly) {
+    desc.innerHTML = '✓ All sensor channels within expected operational bounds. No fault detected in current telemetry window.';
+    desc.style.color = 'var(--ok)';
+  } else if (d.severity === 'WARNING') {
+    desc.innerHTML = '⚠ Sensor anomaly detected. Reconstruction error exceeds threshold. Manual inspection recommended.';
+    desc.style.color = 'var(--warn)';
+  } else {
+    desc.innerHTML = '✕ CRITICAL FAULT: Reconstruction error severely exceeds threshold. Immediate intervention required. Possible sensor failure or spacecraft emergency.';
+    desc.style.color = 'var(--danger)';
+  }
+}
+
+// ─── History chart ────────────────────────────────────────────────────────────
+function drawHistoryChart() {
+  const canvas = document.getElementById('historyChart');
+  const ctx = canvas.getContext('2d');
+  canvas.width = canvas.offsetWidth * 2;
+  canvas.height = 240;
+  ctx.scale(2, 2);
+  const W = canvas.offsetWidth, H = 120;
+
+  ctx.clearRect(0, 0, W, H);
+
+  if (scanHistory.length === 0) {
+    ctx.fillStyle = '#4a6a8a';
+    ctx.font = '10px Share Tech Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText('NO SCANS YET', W/2, H/2);
+    return;
+  }
+
+  const maxVal = Math.max(...scanHistory.map(s=>s.score), 2);
+  const pts = scanHistory.slice(-30);
+  const step = W / Math.max(pts.length - 1, 1);
+  const threshY = H - (1 / maxVal) * (H - 20) - 10;
+
+  // Threshold line
+  ctx.strokeStyle = '#ff950066';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(0, threshY); ctx.lineTo(W, threshY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Fill
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = i * step;
+    const y = H - (p.score / maxVal) * (H - 20) - 10;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo((pts.length-1)*step, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,102,255,0.12)';
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  pts.forEach((p, i) => {
+    const x = i * step;
+    const y = H - (p.score / maxVal) * (H - 20) - 10;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = '#0066ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Dots
+  pts.forEach((p, i) => {
+    const x = i * step;
+    const y = H - (p.score / maxVal) * (H - 20) - 10;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI*2);
+    ctx.fillStyle = p.anomaly ? (p.score>2?'#ff2d55':'#ff9500') : '#00ff88';
+    ctx.fill();
+  });
+}
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+function setDot(state) {
+  const d = document.getElementById('modelDot');
+  d.className = 'dot ' + (state === 'ok' ? 'ok' : state === 'warn' ? 'warn active' : 'err active');
+}
+
+function log(msg, type) {
+  const lb = document.getElementById('logBody');
+  const now = new Date().toTimeString().slice(0,8);
+  const cls = type === 'ok' ? 'log-ok' : type === 'warn' ? 'log-warn' : type === 'err' ? 'log-err' : '';
+  lb.innerHTML += `<div class="log-entry"><span class="log-time">${now}</span><span class="${cls}">${msg}</span></div>`;
+  lb.scrollTop = lb.scrollHeight;
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+window.addEventListener('resize', drawHistoryChart);
+</script>
+</body>
+</html>
