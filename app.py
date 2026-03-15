@@ -109,7 +109,7 @@ class LightweightAutoencoder:
         self.W3 -= self.lr*dW3; self.b3 -= self.lr*db3
         self.W4 -= self.lr*dW4; self.b4 -= self.lr*db4
 
-    def fit(self, X, epochs=30, batch_size=128, callback=None):
+    def fit(self, X, epochs=15, batch_size=128, callback=None):
         losses = []
         for ep in range(epochs):
             idx = np.random.permutation(len(X))
@@ -155,7 +155,7 @@ def train_model_background():
 
         ae = LightweightAutoencoder(input_dim=X.shape[1], encoding_dim=32, lr=0.005)
 
-        total_epochs = 40
+        total_epochs = 15
 
         def cb(ep, loss):
             training_status.update({
